@@ -25,5 +25,4 @@ It reads the save file and displays the death count in an overlay. Hotkeys allow
 
 ### Clone the project
 ```bash
-git clone https://github.com/<your-username>/DeathCounter.git
-cd DeathCounter
+git clone https://github.com/<your-username>/ER-DeathCounter-Overlay.git

@@ -1,0 +1,218 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.autodeathcounter</groupId>
+  <artifactId>DeathCounter</artifactId>
+  <version>1.0.0</version>
+  <name>DeathCounter</name>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+    <!-- Java 21 -->
+    <maven.compiler.release>21</maven.compiler.release>
+
+    <!-- Lib-Versionen -->
+    <javafx.version>21</javafx.version>
+    <jnativehook.version>2.2.2</jnativehook.version>
+
+    <!-- Basisname des Artefakts -->
+    <project.build.finalName>${project.artifactId}-${project.version}</project.build.finalName>
+  </properties>
+
+  <dependencies>
+    <!-- JavaFX (für Entwicklung / javafx:run). WIRD NICHT geshadet. -->
+    <dependency>
+      <groupId>org.openjfx</groupId>
+      <artifactId>javafx-controls</artifactId>
+      <version>${javafx.version}</version>
+    </dependency>
+
+    <!-- JNativeHook -->
+    <dependency>
+      <groupId>com.github.kwhat</groupId>
+      <artifactId>jnativehook</artifactId>
+      <version>${jnativehook.version}</version>
+    </dependency>
+
+    <!-- JNA -->
+    <dependency>
+      <groupId>net.java.dev.jna</groupId>
+      <artifactId>jna</artifactId>
+      <version>5.13.0</version>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <!-- Compiler -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.11.0</version>
+        <configuration>
+          <release>21</release>
+        </configuration>
+      </plugin>
+
+      <!-- Shade: erzeugt ZUSÄTZLICH ein -shaded.jar (Original bleibt bestehen) -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>3.5.0</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals><goal>shade</goal></goals>
+            <configuration>
+              <!-- Nicht ersetzen, sondern anhängen -->
+              <shadedArtifactAttached>true</shadedArtifactAttached>
+              <shadedClassifierName>shaded</shadedClassifierName>
+
+              <!-- JavaFX NICHT ins Fat-Jar -->
+              <artifactSet>
+                <excludes>
+                  <exclude>org.openjfx:*</exclude>
+                </excludes>
+              </artifactSet>
+
+              <!-- Kollisionen & Modul-Deskriptoren raus -->
+              <filters>
+                <filter>
+                  <artifact>*:*</artifact>
+                  <excludes>
+                    <exclude>module-info.class</exclude>
+                    <exclude>META-INF/versions/**/module-info.class</exclude>
+                    <exclude>META-INF/MANIFEST.MF</exclude>
+                    <exclude>META-INF/*.SF</exclude>
+                    <exclude>META-INF/*.DSA</exclude>
+                    <exclude>META-INF/*.RSA</exclude>
+                    <exclude>META-INF/substrate/**</exclude>
+                  </excludes>
+                </filter>
+              </filters>
+
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                  <mainClass>autodeathcounter.Main</mainClass>
+                </transformer>
+              </transformers>
+
+              <!-- vereinfacht m2e -->
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- Komfortabler Start aus Eclipse -->
+      <plugin>
+        <groupId>org.openjfx</groupId>
+        <artifactId>javafx-maven-plugin</artifactId>
+        <version>0.0.8</version>
+        <configuration>
+          <mainClass>autodeathcounter.Main</mainClass>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+
+  <!-- Optionale Profile -->
+  <profiles>
+    <!-- OPTION B: Toolchain nur wenn gewünscht -->
+    <profile>
+      <id>use-toolchain</id>
+      <activation>
+        <property>
+          <name>useToolchain</name>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-toolchains-plugin</artifactId>
+            <version>3.1.0</version>
+            <executions>
+              <execution>
+                <goals><goal>toolchain</goal></goals>
+              </execution>
+            </executions>
+            <configuration>
+              <toolchains>
+                <jdk>
+                  <version>[21,)</version>
+                  <vendor>any</vendor>
+                </jdk>
+              </toolchains>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
+    <!-- Optional: Windows App-Image via jlink + jpackage -->
+    <profile>
+      <id>win-appimage</id>
+      <!-- Aktivieren: -Dbuild.win.image -Djavafx.sdk=C:/pfad/zum/javafx-sdk-21 -->
+      <activation>
+        <property>
+          <name>build.win.image</name>
+        </property>
+      </activation>
+      <properties>
+        <javafx.sdk>${env.JAVAFX_SDK}</javafx.sdk>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>exec-maven-plugin</artifactId>
+            <version>3.5.0</version>
+            <executions>
+              <!-- 1) jlink: Custom Runtime -->
+              <execution>
+                <id>jlink-runtime</id>
+                <phase>package</phase>
+                <goals><goal>exec</goal></goals>
+                <configuration>
+                  <executable>jlink</executable>
+                  <arguments>
+                    <argument>--module-path</argument>
+                    <argument>${java.home}/jmods;${javafx.sdk}/lib</argument>
+                    <argument>--add-modules</argument>
+                    <argument>java.base,java.desktop,java.logging,jdk.jfr,jdk.unsupported,javafx.base,javafx.graphics,javafx.controls</argument>
+                    <argument>--output</argument>
+                    <argument>${project.build.directory}/runtime</argument>
+                  </arguments>
+                </configuration>
+              </execution>
+              <!-- 2) jpackage: App-Image (.exe im Ordner) -->
+              <execution>
+                <id>jpackage-app-image</id>
+                <phase>package</phase>
+                <goals><goal>exec</goal></goals>
+                <configuration>
+                  <executable>jpackage</executable>
+                  <arguments>
+                    <argument>--name</argument>        <argument>${project.artifactId}</argument>
+                    <argument>--type</argument>        <argument>app-image</argument>
+                    <argument>--input</argument>       <argument>${project.build.directory}</argument>
+                    <argument>--main-jar</argument>    <argument>${project.build.finalName}-shaded.jar</argument>
+                    <argument>--main-class</argument>  <argument>autodeathcounter.Main</argument>
+                    <argument>--runtime-image</argument><argument>${project.build.directory}/runtime</argument>
+                    <argument>--dest</argument>        <argument>${project.build.directory}/withJRE</argument>
+                    <!-- Debug-Konsole unter Windows -->
+                    <argument>--win-console</argument>
+                  </arguments>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>

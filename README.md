@@ -23,6 +23,9 @@ It reads the save file and displays the death count in an overlay. Hotkeys allow
 - Maven 3.9+
 - JavaFX 21 (SDK + JMODS for your platform)
 
+## 📝 License
+This project is licensed under the [MIT License](LICENSE).
+
 ### Clone the project
 ```bash
 git clone https://github.com/<your-username>/ER-DeathCounter-Overlay.git

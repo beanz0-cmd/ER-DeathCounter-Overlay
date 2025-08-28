@@ -1,0 +1,45 @@
+# === Maven Build Output ===
+/target/
+
+# === Eclipse Metadata ===
+.classpath
+.project
+.settings/
+*.launch
+
+# === IntelliJ IDEA (falls du mal wechselst) ===
+.idea/
+*.iml
+*.iws
+
+# === OS Specific ===
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+ehthumbs.db
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# === Logs & Temp Files ===
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# === Java Specific ===
+*.class
+*.jar
+*.war
+*.ear
+hs_err_pid*
+replay_pid*
+
+# === jpackage outputs ===
+/installer/
+/withJRE/
+/appinput/
+/runtime/

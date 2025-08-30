@@ -16,8 +16,6 @@ import java.util.concurrent.TimeUnit;
 //import java.util.logging.Level;
 //import java.util.logging.Logger;
 
-import javax.naming.NameClassPair;
-
 import com.github.kwhat.jnativehook.GlobalScreen;
 import com.github.kwhat.jnativehook.NativeHookException;
 import com.github.kwhat.jnativehook.keyboard.NativeKeyEvent;
@@ -67,7 +65,7 @@ public class Overlay extends Application implements NativeKeyListener {
     private FileTime lastModifiedTime;
     
     // JavaFx - Overlay
-    private Label focusedSlotLabel = new Label("Kein Slot ausgewählt");
+    private Label focusedSlotLabel = new Label("No Slot selected");
     private Label deathCountLabel = new Label("Deaths: -");
     private Stage overlayStage = null;
     private VBox root;
@@ -78,7 +76,6 @@ public class Overlay extends Application implements NativeKeyListener {
 	private double scale = 1.0;
 	private static final double BASE_FONT_SIZE_BIG = 28;
 	private static final double BASE_FONT_SIZE_SMALL = 10;
-	private Screen win;
     
     // JavaFx - SlotSelection
 	private Stage slotStage = null;
@@ -90,9 +87,9 @@ public class Overlay extends Application implements NativeKeyListener {
     private static final Label INFO_LABEL = new Label(
     		"----------------------------------------------------------------------" +
     		"\nHOTKEY INFO:" +
-    		"\nMove Overlay \nUp/Down/Left/Right: \t\t" + "Str & " + NativeKeyEvent.getKeyText(NativeKeyEvent.VC_UP) + "/" +
-			NativeKeyEvent.getKeyText(NativeKeyEvent.VC_DOWN) + "/" + NativeKeyEvent.getKeyText(NativeKeyEvent.VC_LEFT) +
-			"/" + NativeKeyEvent.getKeyText(NativeKeyEvent.VC_RIGHT) + 
+    		"\nMove Overlay \nUp/Down/Left/Right: \t\t" + "Str & " + "🠕" + "/" +
+			"🠗" + "/" + "🠔" +
+			"/" + "🠖" + "\n\t\t\t\t\t\tor hold ALT and drag with mouse" +
 			"\nChange Opacity +/-: \t\t" + "Str & " + NativeKeyEvent.getKeyText(NativeKeyEvent.VC_T) + 
 			"/" + NativeKeyEvent.getKeyText(NativeKeyEvent.VC_R) + 
 			"\nResize +/-: \t\t\t\t" + "Str & +/-" +
@@ -211,8 +208,8 @@ public void start(Stage primaryStage) throws Exception {
 	        double bigFontSize = BASE_FONT_SIZE_BIG*scale;
 	        double smallFontSize = BASE_FONT_SIZE_SMALL*scale;
 	        
-	        deathCountLabel.setFont(Font.font("Arial", FontWeight.BOLD, bigFontSize));
-	        focusedSlotLabel.setFont(Font.font("Arial", smallFontSize));
+	        deathCountLabel.setFont(Font.font("Prince Valiant", FontWeight.BOLD, bigFontSize));
+	        focusedSlotLabel.setFont(Font.font("Prince Valiant", smallFontSize));
 	        
 	        overlayStage.sizeToScene();
 	        
@@ -329,7 +326,7 @@ public void start(Stage primaryStage) throws Exception {
         grid.add(closeBtn, 1, 6);
         grid.add(selectBtn, 0, 6);
 
-        stage.setScene(new Scene(grid, 500, 400));
+        stage.setScene(new Scene(grid, 500, 425));
         return stage;
     }
 
@@ -337,7 +334,7 @@ public void start(Stage primaryStage) throws Exception {
         try {
             if (saveFile == null || !saveFile.exists()) {
                 Platform.runLater(() -> {
-                    focusedSlotLabel.setText("Kein Slot ausgewählt");
+                    focusedSlotLabel.setText("No Slot selected");
                     deathCountLabel.setText("Deaths: -");
                     nameLabel.setText("Name: \t\t-");
                     levelLabel.setText("Level: \t\t-");
@@ -365,7 +362,7 @@ public void start(Stage primaryStage) throws Exception {
                 }
 
                 if (toFocus == null) {
-                    focusedSlotLabel.setText("Kein Slot ausgewählt");
+                    focusedSlotLabel.setText("No Slot selected");
                     deathCountLabel.setText("Deaths: -");
                     nameLabel.setText("Name: \t\t-");
                     levelLabel.setText("Level: \t\t-");
@@ -415,7 +412,8 @@ public void start(Stage primaryStage) throws Exception {
         root.setAlignment(Pos.CENTER);
         root.setPadding(new Insets(10));
 		root.setBackground(new Background(new BackgroundFill(Color.rgb(30, 30, 30, 0.8), new CornerRadii(20), Insets.EMPTY)));
-		root.setMouseTransparent(true);		
+		root.setMouseTransparent(true);
+		root.setPickOnBounds(false);
 		
 		Scene scene = new Scene(root);
 		scene.setFill(Color.TRANSPARENT);
@@ -477,10 +475,10 @@ public void start(Stage primaryStage) throws Exception {
 		    glow.setRadius(12);
 		    glow.setColor(Color.rgb(240, 0, 25, 0.7));
 		    
-		    deathCountLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, BASE_FONT_SIZE_BIG * scale));
+		    deathCountLabel.setFont(Font.font("Prince Valiant", FontWeight.BOLD, BASE_FONT_SIZE_BIG * scale));
 		    deathCountLabel.setTextFill(Color.web("#FF4444"));
 		    deathCountLabel.setEffect(glow);
-		    focusedSlotLabel.setFont(Font.font("Segoe UI", BASE_FONT_SIZE_SMALL * scale));
+		    focusedSlotLabel.setFont(Font.font("Prince Valiant", BASE_FONT_SIZE_SMALL * scale));
 		    focusedSlotLabel.setTextFill(Color.web("#B0BEC5"));
 		    
 		    overlayStage.setWidth(baseWidth * scale);

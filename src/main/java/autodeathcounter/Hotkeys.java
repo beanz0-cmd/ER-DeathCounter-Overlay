@@ -61,10 +61,10 @@ public class Hotkeys implements NativeKeyListener {
 	    
 	    if (isOnlyCtrlPressed(e)) {
 	        switch (code) {
-	            case MOVE_LEFT_KEY -> javafx.application.Platform.runLater(() -> overlay.moveOverlay(-10, 0));
-	            case MOVE_RIGHT_KEY -> javafx.application.Platform.runLater(() -> overlay.moveOverlay(10, 0));
-	            case MOVE_UP_KEY -> javafx.application.Platform.runLater(() -> overlay.moveOverlay(0, -10));
-	            case MOVE_DOWN_KEY -> javafx.application.Platform.runLater(() -> overlay.moveOverlay(0, 10));
+	            case MOVE_LEFT_KEY -> javafx.application.Platform.runLater(() -> overlay.moveOverlay(-20, 0));
+	            case MOVE_RIGHT_KEY -> javafx.application.Platform.runLater(() -> overlay.moveOverlay(20, 0));
+	            case MOVE_UP_KEY -> javafx.application.Platform.runLater(() -> overlay.moveOverlay(0, -20));
+	            case MOVE_DOWN_KEY -> javafx.application.Platform.runLater(() -> overlay.moveOverlay(0, 20));
 	            case INCREASE_SIZE_KEY -> javafx.application.Platform.runLater(() -> overlay.changeScale(0.1));
 	            case DECREASE_SIZE_KEY -> javafx.application.Platform.runLater(() -> overlay.changeScale(-0.1));
 	            case DECREASE_OPA_KEY -> javafx.application.Platform.runLater(() -> overlay.changeOpacity(-0.05));

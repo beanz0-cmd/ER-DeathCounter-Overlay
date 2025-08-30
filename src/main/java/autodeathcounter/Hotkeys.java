@@ -35,7 +35,7 @@ public class Hotkeys implements NativeKeyListener {
 	
 	//Key repeat guard
 	private final Map<Integer, Long> lastKeyAt = new ConcurrentHashMap<>();
-	private static final long REPEAT_GUARD_MS = 120;
+	private static final long REPEAT_GUARD_MS = 50;
 	
 	public Hotkeys (Overlay overlay) {
 		this.overlay = overlay;

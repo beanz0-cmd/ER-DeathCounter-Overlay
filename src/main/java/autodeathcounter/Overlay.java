@@ -103,7 +103,9 @@ public void start(Stage primaryStage) throws Exception {
 	
         //Init-Call----------------------------------------------\\
         saveFile = loadSaveFileDir();
-        saveFile = openSaveFileDialog(primaryStage);
+        if(saveFile == null) {
+        	saveFile = openSaveFileDialog(primaryStage);        	
+        }
         if(saveFile != null) {
         		saveFileDir(saveFile);
         } else {

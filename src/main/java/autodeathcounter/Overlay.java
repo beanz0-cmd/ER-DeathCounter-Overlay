@@ -16,6 +16,8 @@ import java.util.concurrent.TimeUnit;
 //import java.util.logging.Level;
 //import java.util.logging.Logger;
 
+import javax.naming.NameClassPair;
+
 import com.github.kwhat.jnativehook.GlobalScreen;
 import com.github.kwhat.jnativehook.NativeHookException;
 import com.github.kwhat.jnativehook.keyboard.NativeKeyEvent;
@@ -25,20 +27,26 @@ import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.geometry.Rectangle2D;
+import javafx.scene.Cursor;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.effect.DropShadow;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.Background;
 import javafx.scene.layout.BackgroundFill;
 import javafx.scene.layout.CornerRadii;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.scene.robot.Robot;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.FileChooser;
+import javafx.stage.Screen;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
 import javafx.stage.Window;
@@ -70,6 +78,7 @@ public class Overlay extends Application implements NativeKeyListener {
 	private double scale = 1.0;
 	private static final double BASE_FONT_SIZE_BIG = 28;
 	private static final double BASE_FONT_SIZE_SMALL = 10;
+	private Screen win;
     
     // JavaFx - SlotSelection
 	private Stage slotStage = null;
@@ -395,18 +404,45 @@ public void start(Stage primaryStage) throws Exception {
             deathCountLabel.setText("Loading...");
         }
     }
-
+    
+    private double pressOffsetX, pressOffsetY;
+    
     private void startOverlay() {
         overlayStage = new Stage();
 	    
+        
         root = new VBox(focusedSlotLabel, deathCountLabel);
         root.setAlignment(Pos.CENTER);
         root.setPadding(new Insets(10));
 		root.setBackground(new Background(new BackgroundFill(Color.rgb(30, 30, 30, 0.8), new CornerRadii(20), Insets.EMPTY)));
-		root.setMouseTransparent(true);
-        
+		root.setMouseTransparent(true);		
+		
 		Scene scene = new Scene(root);
 		scene.setFill(Color.TRANSPARENT);
+		
+		scene.setOnMouseMoved(e -> {if(e.isAltDown()){scene.setCursor(Cursor.OPEN_HAND);}else{scene.setCursor(Cursor.DEFAULT);};});
+		scene.setOnMousePressed(e -> {
+			if(!e.isAltDown()) return;
+			pressOffsetX = e.getSceneX();
+			pressOffsetY = e.getSceneY();
+			scene.setCursor(Cursor.CLOSED_HAND);
+		});
+		scene.setOnMouseDragged(e -> {
+			if(!e.isAltDown()) return;
+		    overlayStage.setX((e.getScreenX() - pressOffsetX));
+		    overlayStage.setY((e.getScreenY() - pressOffsetY));
+		});
+		scene.setOnMouseReleased(e -> {
+			scene.setCursor(Cursor.DEFAULT);
+			clampToVisible(overlayStage);
+			saveOverlayConfig();
+		});
+		scene.addEventHandler(KeyEvent.KEY_PRESSED, e -> {
+			if(e.getCode() == KeyCode.ALT) root.setMouseTransparent(false);
+		});
+		scene.addEventFilter(KeyEvent.KEY_RELEASED, e -> {
+			if(e.getCode() == KeyCode.ALT) root.setMouseTransparent(true);
+		});
 		
         overlayStage.initStyle(StageStyle.TRANSPARENT);
 		overlayStage.setAlwaysOnTop(true);
@@ -415,11 +451,18 @@ public void start(Stage primaryStage) throws Exception {
 		overlayStage.setMinHeight(75);
 		overlayStage.setMaxWidth(1900);
 		overlayStage.setMaxHeight(1100);
-		overlayStage.setX(20);
-		overlayStage.setY(20);
         overlayStage.show();
-        overlayStage.toFront();
         
+        Screen s = getScreenFor(overlayStage);
+        Rectangle2D vb = s.getVisualBounds();
+        overlayStage.setX(vb.getMaxX() - 210);
+        overlayStage.setY(vb.getMinY() + 10);
+        
+        wireAutoClamp(overlayStage);
+        clampToVisible(overlayStage);
+        
+        overlayStage.toFront();
+               
         initBaseSize();
         loadOverlayConfig();
         
@@ -443,6 +486,8 @@ public void start(Stage primaryStage) throws Exception {
 		    overlayStage.setWidth(baseWidth * scale);
 		    overlayStage.setHeight(baseHeight * scale);
 		    overlayStage.setOpacity(overlayStage.getOpacity());
+		    
+		    clampToVisible(overlayStage);
         });
         
         overlayStage.setOnCloseRequest(e -> {
@@ -450,7 +495,51 @@ public void start(Stage primaryStage) throws Exception {
         });
     }
     
-    //Helpers Overlay - Style/Config-----------------------------------------------------------------------\\
+    public static Screen getScreenFor(Stage stage) {
+    	Rectangle2D win = new Rectangle2D(stage.getX(), stage.getY(), stage.getWidth(), stage.getHeight());
+    	var list = Screen.getScreensForRectangle(win);
+    	return list.isEmpty() ? Screen.getPrimary() : list.get(0);
+    }
+    
+    public static void clampToVisible(Stage stage) {
+    	Screen s = getScreenFor(stage);
+		Rectangle2D b = s.getVisualBounds();
+		double nx = Math.max(b.getMinX(), Math.min(stage.getX(), b.getMaxX() - stage.getWidth()));
+		double ny = Math.max(b.getMinY(), Math.min(stage.getY(), b.getMaxY() - stage.getHeight()));
+		stage.setX(nx);
+		stage.setY(ny);
+		return;
+	}
+    
+    public static void centerOnCurrentScreen(Stage stage) {
+    	Screen s = getScreenFor(stage);
+        Rectangle2D vb = s.getVisualBounds();
+        double x = vb.getMinX() + (vb.getWidth()  - stage.getWidth())  / 2.0;
+        double y = vb.getMinY() + (vb.getHeight() - stage.getHeight()) / 2.0;
+        stage.setX(x);
+        stage.setY(y);
+    }
+    
+    public static void moveToMouseScreen(Stage stage) {
+    	Robot r = new Robot();
+    	double mx = r.getMouseX();
+    	double my = r.getMouseY();
+    	
+    	Screen target = Screen.getScreensForRectangle(new Rectangle2D(mx, my, 1, 1)).stream().findFirst().orElse(Screen.getPrimary());
+    	Rectangle2D vb = target.getVisualBounds();
+    	stage.setX(vb.getMinX() + 20);
+    	stage.setY(vb.getMinY() + 20);
+    }
+
+    public static void wireAutoClamp(Stage stage) {
+    	Runnable clamp = () -> clampToVisible(stage);
+    	stage.xProperty().addListener((obs, o, n) -> clamp.run());
+    	stage.yProperty().addListener((obs, o, n) -> clamp.run());
+    	stage.widthProperty().addListener((obs, o, n) -> clamp.run());
+    	stage.heightProperty().addListener((obs, o, n) -> clamp.run());
+    }
+    
+	//Helpers Overlay - Style/Config-----------------------------------------------------------------------\\
     private void initBaseSize() {
     	baseWidth = root.getWidth() > 0 ? root.getWidth() : 200;
     	baseHeight = root.getHeight() > 0 ? root.getHeight() : 75;

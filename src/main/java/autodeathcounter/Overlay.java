@@ -327,6 +327,7 @@ public void start(Stage primaryStage) throws Exception {
         grid.add(selectBtn, 0, 6);
 
         stage.setScene(new Scene(grid, 500, 425));
+        stage.setAlwaysOnTop(true);
         return stage;
     }
 

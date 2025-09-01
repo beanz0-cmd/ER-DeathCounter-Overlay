@@ -680,6 +680,8 @@ public void start(Stage primaryStage) throws Exception {
         if(DEFAULT_ER_DIR != null && DEFAULT_ER_DIR.exists() && DEFAULT_ER_DIR.isDirectory()) fC.setInitialDirectory(DEFAULT_ER_DIR);
         fC.getExtensionFilters().add(
                 new FileChooser.ExtensionFilter("Elden Ring Save Files (*.sl2;*.co2;*.mod)", "*.sl2", "*.co2", ".mod"));
+        fC.getExtensionFilters().add(
+        		new FileChooser.ExtensionFilter("All Files", "*.*"));
         return (ownerWindow != null) ? fC.showOpenDialog(ownerWindow) : fC.showOpenDialog(null);
     }
     

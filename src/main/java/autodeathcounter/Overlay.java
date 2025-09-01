@@ -679,7 +679,7 @@ public void start(Stage primaryStage) throws Exception {
         fC.setTitle("Choose Elden Ring Save-File");
         if(DEFAULT_ER_DIR != null && DEFAULT_ER_DIR.exists() && DEFAULT_ER_DIR.isDirectory()) fC.setInitialDirectory(DEFAULT_ER_DIR);
         fC.getExtensionFilters().add(
-                new FileChooser.ExtensionFilter("Elden Ring Save Files (*.sl2;*.co2)", "*.sl2", "*.co2"));
+                new FileChooser.ExtensionFilter("Elden Ring Save Files (*.sl2;*.co2;*.mod)", "*.sl2", "*.co2", ".mod"));
         return (ownerWindow != null) ? fC.showOpenDialog(ownerWindow) : fC.showOpenDialog(null);
     }
     

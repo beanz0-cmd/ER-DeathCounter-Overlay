@@ -6,8 +6,8 @@ import javafx.application.Application;
 
 public class Main {
 	public static void main(String[] args) {
-		System.out.println("=== DeathCounter gestartet ====");
-		System.out.println("Aktuelle Zeit: " + java.time.LocalDateTime.now());
+		System.out.println("=== DeathCounter started ====");
+		System.out.println("Current Time: " + java.time.LocalDateTime.now());
 		
 		System.setProperty("jnativehook.lib.location", System.getProperty("java.io.tmpdir"));
 		

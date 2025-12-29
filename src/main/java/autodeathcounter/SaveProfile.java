@@ -38,7 +38,6 @@ public class SaveProfile {
 	public void setFocused(boolean isFocused) {
 		this.isFocused = isFocused;
 	}
-
 	
 	public void setActive(boolean active) {
 		this.active = active;

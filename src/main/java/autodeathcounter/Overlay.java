@@ -29,6 +29,7 @@ import javafx.geometry.Rectangle2D;
 import javafx.scene.Cursor;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.effect.DropShadow;
@@ -55,10 +56,12 @@ public class Overlay extends Application implements NativeKeyListener {
     private static final File OVERLAY_CONF_FILE = new File(CONFIG_DIR, "overlay.conf");
     private static final File DEFAULT_ER_DIR = PathsUtil.resolveEldenRingDir();
     private static final File SAVE_FILE_DIR = new File(CONFIG_DIR, "savefile.conf");
+    private static final File LAST_SLOT_DIR = new File(CONFIG_DIR, "last_used_slot.conf");
     
     // DeathCount-Related
     private List<SaveProfile> profiles = new ArrayList<>();
     private int currentFocusedSlot = -1;
+    private boolean writeLastSlot;
 
     // Timer
     private ScheduledExecutorService saveFileWatcher;
@@ -85,16 +88,17 @@ public class Overlay extends Application implements NativeKeyListener {
     private final Label timeLabel = new Label("Playtime: \t\t-");
     private final Label deathLabel = new Label("Deaths: \t\t-");
     private static final Label INFO_LABEL = new Label(
-    		"----------------------------------------------------------------------" +
-    		"\nHOTKEY INFO:" +
+    		"-------------------------------------------------------------------------" +
+    		"\nHOTKEY INFO:" + "\n" +
     		"\nMove Overlay \nUp/Down/Left/Right: \t\t" + "Str & " + "🠕" + "/" +
 			"🠗" + "/" + "🠔" +
-			"/" + "🠖" + "\n\t\t\t\t\t\tor hold ALT and drag with mouse" +
+			"/" + "🠖" + " or \n\t\t\t\t\t\thold ALT and drag with mouse" + "\n" +
 			"\nChange Opacity +/-: \t\t" + "Str & " + NativeKeyEvent.getKeyText(NativeKeyEvent.VC_T) + 
-			"/" + NativeKeyEvent.getKeyText(NativeKeyEvent.VC_R) + 
-			"\nResize +/-: \t\t\t\t" + "Str & +/-" +
-			"\nTo close the Overlay press: \t" + NativeKeyEvent.getKeyText(Hotkeys.CLOSE_OVERLAY_KEY) +
-			"\nTo open/close \nthe Slot Viewer press: \t\t" + NativeKeyEvent.getKeyText(Hotkeys.OPEN_CONFIG_KEY)
+			"/" + NativeKeyEvent.getKeyText(NativeKeyEvent.VC_R) + "\n" +
+			"\nOpen or Close Slot Viewer: \t" + NativeKeyEvent.getKeyText(Hotkeys.OPEN_CONFIG_KEY) +
+			"\n\nResize +/-: \t\t\t\t" + "Str & +/-" +
+			"\n\nClosing the Overlay: \t\t" + NativeKeyEvent.getKeyText(Hotkeys.CLOSE_OVERLAY_KEY)
+			+ "\n-------------------------------------------------------------------------"
     		);
 
     // Save-File
@@ -104,9 +108,6 @@ public class Overlay extends Application implements NativeKeyListener {
     private Hotkeys hotkeys;
     
 public void start(Stage primaryStage) throws Exception {
-
-		System.out.println("===DeathCounter started==="); //Debug
-	
         //Init-Call----------------------------------------------\\
         saveFile = loadSaveFileDir();
         if(saveFile == null) {
@@ -117,6 +118,8 @@ public void start(Stage primaryStage) throws Exception {
         } else {
         	saveFile = null;
         }
+        
+        writeLastSlot = loadLastSlot();
 
         Parser parser = new Parser();
         profiles = parser.extractProfiles(saveFile);        	
@@ -169,10 +172,17 @@ public void start(Stage primaryStage) throws Exception {
         if (saveFileWatcher != null) {
             saveFileWatcher.shutdownNow();
         }
+        if (writeLastSlot) {
+        	saveLastSlot(getCurrentFocusedSlot());
+        }
+        try {
+    		Thread.sleep(1000);
+    	} catch (InterruptedException ie) {
+    		ie.printStackTrace();
+    	}
     }
     
     public void toggleSlotSelection() {
-    	
         if (slotStage == null) {
            slotStage = createSlotSelectionStage();
         }
@@ -266,15 +276,13 @@ public void start(Stage primaryStage) throws Exception {
     	Stage stage = new Stage();
     	stage.setTitle("Slot Viewer");
     	
+        Label selectorLabel = new Label("Select Slot:");
+    	
     	slotSelector = new ComboBox<>();
     	
         for (SaveProfile p : profiles) {
             slotSelector.getItems().add(p.slot);
         }
-        
-        Button closeBtn = new Button("Close");
-        closeBtn.setStyle("-fx-background-color: #E6E6FA");
-        closeBtn.setOnAction(e -> slotStage.hide());
         
         slotSelector.setOnAction(e -> {
             Integer selectedSlot = slotSelector.getSelectionModel().getSelectedItem();
@@ -284,12 +292,18 @@ public void start(Stage primaryStage) throws Exception {
             }
         });
         
+        Button closeBtn = new Button("Close");
+        closeBtn.setStyle("-fx-background-color: #E6E6FA");
+        closeBtn.setOnAction(e -> { 
+	        slotStage.hide();
+        });
+
         Button selectBtn = new Button("Select Save File");
         selectBtn.setStyle("-fx-background-color: #E6E6FA");
         selectBtn.setOnAction(e -> {
         	try {
         		File f = openSaveFileDialog(stage);
-        		if(f==null) {
+        		if(f == null) {
         			return;
         		}
         		setSaveFile(f);
@@ -298,23 +312,59 @@ public void start(Stage primaryStage) throws Exception {
         	} catch (Exception ignore) {}
         });
         
+        Button helpBtn = new Button("Help");
+        helpBtn.setOnAction(e -> {
+        	boolean show = !INFO_LABEL.isVisible();
+        	
+        	INFO_LABEL.setVisible(show);
+        	INFO_LABEL.setManaged(show);
+        	
+        	stage.sizeToScene();
+        });
+        
+        Label space = new Label();
+        
+        Label saveSlot = new Label();
+
+        CheckBox saveLastSlot = new CheckBox("Save current Slot");
+        saveLastSlot.selectedProperty().addListener((obs, oldVal, newVal) -> {
+        	if (newVal) {
+        		writeLastSlot = true;
+        		saveSlot.setText("Saving current slot on close...");
+        		stage.sizeToScene();
+        	} else {
+        		writeLastSlot = false;
+        		saveSlot.setText("");
+        		stage.sizeToScene();
+        	}
+        });
+        
+        if (writeLastSlot) {
+        	slotSelector.getSelectionModel().select(currentFocusedSlot);
+        	saveLastSlot.setSelected(true);
+        }
+        
+        selectorLabel.setTextFill(Color.web("#FFF0F5"));
         slotSelector.setStyle("-fx-text-fill: #FFF0F5; -fx-prompt-text-fill: #FFF0F5; -fx-background-color: #E6E6FA");
+        
         nameLabel.setTextFill(Color.web("#FFF0F5"));
         levelLabel.setTextFill(Color.web("#FFF0F5"));
         timeLabel.setTextFill(Color.web("#FFF0F5"));
         deathLabel.setTextFill(Color.web("#FFF0F5"));
         
+        saveLastSlot.setStyle("-fx-text-fill: #FFF0F5; -fx-prompt-text-fill: #FFF0F5;");
+        saveSlot.setTextFill(Color.web("#FFF0F5"));
         
         INFO_LABEL.setTextFill(Color.web("#CDC1C5"));
+        INFO_LABEL.setWrapText(true);
+        INFO_LABEL.setVisible(false);
+        INFO_LABEL.setManaged(false);
         
         GridPane grid = new GridPane();
         grid.setPadding(new Insets(10));
         grid.setVgap(5);
         grid.setHgap(5);
-        grid.setStyle("-fx-padding: 20; -fx-font-size: 14; -fx-background-color: #1E1E1E;");
-        
-        Label selectorLabel = new Label("Select Slot:");
-        selectorLabel.setTextFill(Color.web("#FFF0F5"));
+        grid.setStyle("-fx-padding: 20; -fx-font-size: 14; -fx-background-color: #000;");
         
         grid.add(selectorLabel, 0, 0);
         grid.add(slotSelector, 1, 0);
@@ -322,11 +372,17 @@ public void start(Stage primaryStage) throws Exception {
         grid.add(levelLabel, 0, 2);
         grid.add(timeLabel, 0, 3);
         grid.add(deathLabel, 0, 4);
-        grid.add(INFO_LABEL, 0, 5);
-        grid.add(closeBtn, 1, 6);
-        grid.add(selectBtn, 0, 6);
+        grid.add(space, 0, 5, 2, 1);
+        grid.add(saveLastSlot, 0, 6);
+        grid.add(saveSlot, 0, 7);
+        grid.add(INFO_LABEL, 0, 8);
+        grid.add(selectBtn, 0, 9);
+        grid.add(helpBtn, 1, 9);
+        grid.add(closeBtn, 2, 9);
 
-        stage.setScene(new Scene(grid, 500, 425));
+        Scene sc = new Scene(grid);
+        stage.setScene(sc);
+        stage.sizeToScene();
         stage.setAlwaysOnTop(true);
         return stage;
     }
@@ -558,6 +614,46 @@ public void start(Stage primaryStage) throws Exception {
 //		fade.play();
 //    }
     
+    private boolean loadLastSlot() {
+    	if (!CONFIG_DIR.exists()) CONFIG_DIR.mkdirs();
+
+	    if (!LAST_SLOT_DIR.exists()) {
+	        return false;
+	    }
+
+	    try (BufferedReader br = new BufferedReader(new FileReader(LAST_SLOT_DIR))) {
+	        String line;
+	        while ((line = br.readLine()) != null) {
+	            String[] parts = line.split("=");
+	            if (parts.length != 2) continue;
+	            String key = parts[0].trim();
+	            String value = parts[1].trim();
+
+	            if (key.equals("slot")) {
+	            	setCurrentFocusedSlot(Integer.parseInt(value)); 
+	            	return true;
+	            };
+	        }
+	    } catch (IOException | NumberFormatException e) {
+	        System.out.println("Error while loading slot configuration: " + e.getMessage());
+	        e.printStackTrace();
+	    }
+	    return false;
+    }
+    
+    private void saveLastSlot(int slot) {
+    	if (!CONFIG_DIR.exists()) CONFIG_DIR.mkdirs();
+
+		try (BufferedWriter bw = new BufferedWriter(new FileWriter(LAST_SLOT_DIR))) {
+			bw.write("slot=" + slot + "\n"); 
+			System.out.println("Successfully written last Slot to config");
+        	
+		} catch (IOException e) {
+			System.out.println("Error while saving overlay configuration: " + e.getMessage());
+		}
+    }
+    
+    
     private void loadOverlayConfig() {
 	    if (!CONFIG_DIR.exists()) CONFIG_DIR.mkdirs();
 
@@ -574,12 +670,13 @@ public void start(Stage primaryStage) throws Exception {
 	            String value = parts[1].trim();
 
 	            switch (key) {
-	                case "posX": overlayStage.setX(Double.parseDouble(value)); break;
-	                case "posY": overlayStage.setY(Double.parseDouble(value)); break;
-	                case "width": baseWidth = Double.parseDouble(value); break;
-	                case "height": baseHeight = Double.parseDouble(value); break;
-	                case "opacity": overlayStage.setOpacity(Double.parseDouble(value)); break;
-	                case "scale": scale = Double.parseDouble(value); break;
+	                case "posX" -> overlayStage.setX(Double.parseDouble(value));
+	                case "posY" -> overlayStage.setY(Double.parseDouble(value));
+	                case "width" -> baseWidth = Double.parseDouble(value);
+	                case "height" -> baseHeight = Double.parseDouble(value);
+	                case "opacity" -> overlayStage.setOpacity(Double.parseDouble(value));
+	                case "scale" -> scale = Double.parseDouble(value);
+	                default -> {}
 	            }
 	        }
 	    } catch (IOException | NumberFormatException e) {
@@ -599,6 +696,7 @@ public void start(Stage primaryStage) throws Exception {
 			bw.write("height=" + baseHeight + "\n");
         	bw.write("opacity=" + overlayStage.getOpacity() + "\n");
         	bw.write("scale=" + scale + "\n");
+        	
 		} catch (IOException e) {
 			System.out.println("Error while saving overlay configuration: " + e.getMessage());
 		}

@@ -90,13 +90,13 @@ public class Overlay extends Application implements NativeKeyListener {
     private static final Label INFO_LABEL = new Label(
     		"-------------------------------------------------------------------------" +
     		"\nHOTKEY INFO:" + "\n" +
-    		"\nMove Overlay \nUp/Down/Left/Right: \t\t" + "Str & " + "🠕" + "/" +
+    		"\nMove Overlay \nUp/Down/Left/Right: \t\t" + NativeKeyEvent.getKeyText(NativeKeyEvent.VC_CONTROL) + " and " + "🠕" + "/" +
 			"🠗" + "/" + "🠔" +
 			"/" + "🠖" + " or \n\t\t\t\t\t\thold ALT and drag with mouse" + "\n" +
-			"\nChange Opacity +/-: \t\t" + "Str & " + NativeKeyEvent.getKeyText(NativeKeyEvent.VC_T) + 
+			"\nChange Opacity +/-: \t\t" + NativeKeyEvent.getKeyText(NativeKeyEvent.VC_CONTROL)+ " and " + NativeKeyEvent.getKeyText(NativeKeyEvent.VC_T) + 
 			"/" + NativeKeyEvent.getKeyText(NativeKeyEvent.VC_R) + "\n" +
 			"\nOpen or Close Slot Viewer: \t" + NativeKeyEvent.getKeyText(Hotkeys.OPEN_CONFIG_KEY) +
-			"\n\nResize +/-: \t\t\t\t" + "Str & +/-" +
+			"\n\nResize +/-: \t\t\t\t" + NativeKeyEvent.getKeyText(NativeKeyEvent.VC_CONTROL) + " and +/-" +
 			"\n\nClosing the Overlay: \t\t" + NativeKeyEvent.getKeyText(Hotkeys.CLOSE_OVERLAY_KEY)
 			+ "\n-------------------------------------------------------------------------"
     		);

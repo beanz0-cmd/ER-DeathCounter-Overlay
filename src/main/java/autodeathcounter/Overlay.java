@@ -10,6 +10,9 @@ import java.nio.file.Files;
 import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -97,13 +100,25 @@ public class Overlay extends Application implements NativeKeyListener {
 			"/" + NativeKeyEvent.getKeyText(NativeKeyEvent.VC_R) + "\n" +
 			"\nOpen or Close Slot Viewer: \t" + NativeKeyEvent.getKeyText(Hotkeys.OPEN_CONFIG_KEY) +
 			"\n\nResize +/-: \t\t\t\t" + NativeKeyEvent.getKeyText(NativeKeyEvent.VC_CONTROL) + " and +/-" +
-			"\n\nClosing the Overlay: \t\t" + NativeKeyEvent.getKeyText(Hotkeys.CLOSE_OVERLAY_KEY)
+			"\n\nClosing the Overlay: \t\t" + NativeKeyEvent.getKeyText(Hotkeys.CLOSE_OVERLAY_KEY) +
+            "\n\nMissed deaths: \t\tAutomatically detected from the YOU DIED screen" +
+            "\n\t\t\t\tand reconciled with the save counter"
 			+ "\n-------------------------------------------------------------------------"
     		);
 
     // Save-File
     private File saveFile = null;
     
+    // Automatic fallback for deaths that Elden Ring does not add to its save counter.
+    private final Map<Integer, Integer> fallbackDeaths = new ConcurrentHashMap<>();
+    private DeathDetector deathDetector;
+
+    // A detected death is reconciled against the save counter before a fallback +1 is added.
+    private volatile long pendingDeathToken = 0;
+    private volatile int pendingDeathSlot = -1;
+    private volatile int pendingRawDeaths = -1;
+    private static final int FINAL_DEATH_RECONCILE_SECONDS = 12;
+
     //Hotkeys
     private Hotkeys hotkeys;
     
@@ -119,11 +134,12 @@ public void start(Stage primaryStage) throws Exception {
         	saveFile = null;
         }
         
+        loadFallbackDeaths();
         writeLastSlot = loadLastSlot();
 
         Parser parser = new Parser();
-        profiles = parser.extractProfiles(saveFile);        	
-        
+        profiles = parser.extractProfiles(saveFile);
+
         if (profiles.isEmpty()) {
             Platform.runLater(() -> {
                 focusedSlotLabel.setText("No Slot selected");
@@ -131,9 +147,12 @@ public void start(Stage primaryStage) throws Exception {
             });
         }
 
-        startFileWatcher(parser);    
-        
+        if (saveFile != null && saveFile.exists()) {
+            startFileWatcher(parser);
+        }
+
         startOverlay();
+        startDeathDetector();
 
         createSlotSelection();
         slotStage.show();
@@ -169,6 +188,9 @@ public void start(Stage primaryStage) throws Exception {
     }
 	
     public void shutdownExecutors() {
+        if (deathDetector != null) {
+            deathDetector.stop();
+        }
         if (saveFileWatcher != null) {
             saveFileWatcher.shutdownNow();
         }
@@ -242,6 +264,9 @@ public void start(Stage primaryStage) throws Exception {
     }
     
     private void cleanUpAndExit(boolean exitJvm) {
+        if (deathDetector != null) {
+            deathDetector.stop();
+        }
     	if(saveFileWatcher != null) {
     		saveFileWatcher.shutdownNow();
     	}
@@ -387,6 +412,219 @@ public void start(Stage primaryStage) throws Exception {
         return stage;
     }
 
+    private void startDeathDetector() {
+        if (deathDetector != null) return;
+
+        deathDetector = new DeathDetector(
+                () -> overlayStage != null ? getScreenFor(overlayStage) : Screen.getPrimary(),
+                this::handleDetectedDeath);
+        deathDetector.start();
+        System.out.println("[DEATH DETECTOR] Automatic missed-death detection started.");
+    }
+
+    /**
+     * Called once for every visually detected YOU DIED screen.
+     * The save value is only used as a baseline here; no death is added yet.
+     */
+    private void handleDetectedDeath() {
+        if (currentFocusedSlot < 0 || saveFile == null || !saveFile.exists()) {
+            return;
+        }
+
+        SaveProfile current = profiles.stream()
+                .filter(p -> p.slot == currentFocusedSlot)
+                .findFirst()
+                .orElse(null);
+
+        if (current == null || current.deaths < 0) {
+            return;
+        }
+
+        // Do not open a second reconciliation while the previous death is unresolved.
+        if (pendingDeathSlot != -1) {
+            return;
+        }
+
+        long token = ++pendingDeathToken;
+        pendingDeathSlot = current.slot;
+        pendingRawDeaths = current.deaths;
+
+        System.out.println("[DEATH DETECTOR] YOU DIED detected. Slot "
+                + current.slot + ", save deaths before event: " + current.deaths);
+
+        // Show the visually detected death immediately as a temporary +1.
+        // If Elden Ring later increments its own save counter, that pending +1 is
+        // removed at the same time, so the displayed total never double-counts.
+        Platform.runLater(() -> {
+            if (currentFocusedSlot == current.slot) {
+                updateSlotInfo(current.slot);
+            }
+        });
+
+        if (saveFileWatcher == null || saveFileWatcher.isShutdown()) {
+            return;
+        }
+
+        // Check a few times. Normal deaths usually resolve as soon as the save updates.
+        saveFileWatcher.schedule(() -> reconcileDetectedDeath(token, false), 4, TimeUnit.SECONDS);
+        saveFileWatcher.schedule(() -> reconcileDetectedDeath(token, false), 8, TimeUnit.SECONDS);
+        saveFileWatcher.schedule(() -> reconcileDetectedDeath(token, true), FINAL_DEATH_RECONCILE_SECONDS, TimeUnit.SECONDS);
+    }
+
+    private void reconcileDetectedDeath(long token, boolean finalCheck) {
+        if (token != pendingDeathToken || pendingDeathSlot < 0) {
+            return;
+        }
+
+        final int slot = pendingDeathSlot;
+        final int rawDeathsBefore = pendingRawDeaths;
+
+        try {
+            Parser parser = new Parser();
+            List<SaveProfile> freshProfiles = parser.extractProfiles(saveFile);
+            SaveProfile fresh = freshProfiles.stream()
+                    .filter(p -> p.slot == slot)
+                    .findFirst()
+                    .orElse(null);
+
+            if (fresh == null || fresh.deaths < 0) {
+                return;
+            }
+
+            if (fresh.deaths > rawDeathsBefore) {
+                System.out.println("[DEATH DETECTOR] Death already counted by Elden Ring save: "
+                        + rawDeathsBefore + " -> " + fresh.deaths);
+                clearPendingDeath(token);
+                return;
+            }
+
+            if (!finalCheck) {
+                return;
+            }
+
+            // Some death types (notably the NPC-invader case we are handling) do
+            // not reliably increment Elden Ring's regular death counter and may not
+            // cause a detectable save-file write at all. Once the reconciliation
+            // window expires with the raw counter unchanged, the visual YOU DIED
+            // event becomes the fallback authority.
+            fallbackDeaths.merge(slot, 1, Integer::sum);
+            saveFallbackDeaths();
+
+            System.out.println("[DEATH DETECTOR] Save counter did not increase. Added automatic fallback +1 for slot "
+                    + slot + ". Fallback deaths now: " + fallbackDeaths.getOrDefault(slot, 0));
+
+            clearPendingDeath(token);
+
+            Platform.runLater(() -> {
+                if (currentFocusedSlot == slot) {
+                    updateSlotInfo(slot);
+                }
+            });
+        } catch (Exception ex) {
+            System.err.println("[DEATH DETECTOR] Could not reconcile detected death: " + ex.getMessage());
+            if (finalCheck) {
+                clearPendingDeath(token);
+            }
+        }
+    }
+
+    /**
+     * If the regular file watcher sees the normal death counter advance, resolve a
+     * pending visual death immediately instead of waiting for the delayed checks.
+     */
+    private void reconcilePendingDeathFromSave(List<SaveProfile> updatedProfiles) {
+        long token = pendingDeathToken;
+        int slot = pendingDeathSlot;
+        int rawDeathsBefore = pendingRawDeaths;
+
+        if (slot < 0 || rawDeathsBefore < 0) return;
+
+        SaveProfile updated = updatedProfiles.stream()
+                .filter(p -> p.slot == slot)
+                .findFirst()
+                .orElse(null);
+
+        if (updated != null && updated.deaths > rawDeathsBefore) {
+            System.out.println("[DEATH DETECTOR] File watcher confirmed normal save death: "
+                    + rawDeathsBefore + " -> " + updated.deaths);
+            clearPendingDeath(token);
+        }
+    }
+
+    private void clearPendingDeath(long token) {
+        if (token != pendingDeathToken) return;
+        pendingDeathSlot = -1;
+        pendingRawDeaths = -1;
+    }
+
+    private void cancelPendingDeath() {
+        pendingDeathToken++;
+        pendingDeathSlot = -1;
+        pendingRawDeaths = -1;
+    }
+
+    private int getDisplayedDeaths(SaveProfile profile) {
+        if (profile == null || profile.deaths < 0) return -1;
+
+        int pendingVisualDeath = (pendingDeathSlot == profile.slot) ? 1 : 0;
+        return profile.deaths
+                + fallbackDeaths.getOrDefault(profile.slot, 0)
+                + pendingVisualDeath;
+    }
+
+    private File getFallbackDeathsFile() {
+        if (saveFile == null) return null;
+
+        String normalizedPath = saveFile.getAbsolutePath().toLowerCase(Locale.ROOT);
+        String saveId = Integer.toHexString(normalizedPath.hashCode());
+        return new File(CONFIG_DIR, "fallback_deaths_" + saveId + ".conf");
+    }
+
+    private void loadFallbackDeaths() {
+        fallbackDeaths.clear();
+        File file = getFallbackDeathsFile();
+        if (file == null || !file.exists()) return;
+
+        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                String[] parts = line.split("=", 2);
+                if (parts.length != 2 || !parts[0].startsWith("slot")) continue;
+
+                int slot = Integer.parseInt(parts[0].substring(4).trim());
+                int deaths = Integer.parseInt(parts[1].trim());
+                if (slot >= 0 && deaths > 0) {
+                    fallbackDeaths.put(slot, deaths);
+                }
+            }
+        } catch (IOException | NumberFormatException ex) {
+            System.err.println("[DEATH DETECTOR] Could not load fallback deaths: " + ex.getMessage());
+        }
+    }
+
+    private void saveFallbackDeaths() {
+        if (!CONFIG_DIR.exists()) CONFIG_DIR.mkdirs();
+
+        File file = getFallbackDeathsFile();
+        if (file == null) return;
+
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter(file))) {
+            fallbackDeaths.entrySet().stream()
+                    .filter(e -> e.getValue() > 0)
+                    .sorted(Map.Entry.comparingByKey())
+                    .forEach(entry -> {
+                        try {
+                            bw.write("slot" + entry.getKey() + "=" + entry.getValue());
+                            bw.newLine();
+                        } catch (IOException ex) {
+                            throw new RuntimeException(ex);
+                        }
+                    });
+        } catch (IOException | RuntimeException ex) {
+            System.err.println("[DEATH DETECTOR] Could not save fallback deaths: " + ex.getMessage());
+        }
+    }
+
     private void refreshProfiles() {
         try {
             if (saveFile == null || !saveFile.exists()) {
@@ -443,7 +681,8 @@ public void start(Stage primaryStage) throws Exception {
             nameLabel.setText("Name: \t\t" + profile.name);
             levelLabel.setText("Level: \t\t" + profile.level);
             timeLabel.setText("Playtime: \t\t" + profile.formatTime());
-            deathLabel.setText("Deaths: \t\t" + profile.deaths);
+            int displayedDeaths = getDisplayedDeaths(profile);
+            deathLabel.setText("Deaths: \t\t" + (displayedDeaths >= 0 ? displayedDeaths : "-"));
 
             updateOverlayLabels(slot, profile);
         }
@@ -452,8 +691,9 @@ public void start(Stage primaryStage) throws Exception {
     private void updateOverlayLabels(int slot, SaveProfile profile) {
         focusedSlotLabel.setText("Slot " + slot + " - " + profile.name);
 
-        if (profile.deaths >= 0) {
-            deathCountLabel.setText("Deaths: " + profile.deaths);
+        int displayedDeaths = getDisplayedDeaths(profile);
+        if (displayedDeaths >= 0) {
+            deathCountLabel.setText("Deaths: " + displayedDeaths);
         } else {
             deathCountLabel.setText("Loading...");
         }
@@ -752,6 +992,8 @@ public void start(Stage primaryStage) throws Exception {
                     lastModifiedTime = currentModTime;
 
                     List<SaveProfile> updatedProfiles = parser.extractProfiles(f);
+                    reconcilePendingDeathFromSave(updatedProfiles);
+
                     if (updatedProfiles.size() != profiles.size()) {
                         profiles = updatedProfiles;
                     } else {
@@ -810,5 +1052,13 @@ public void start(Stage primaryStage) throws Exception {
 
     public void setSaveFile(File saveFile) {
         this.saveFile = saveFile;
+        this.lastModifiedTime = null;
+        cancelPendingDeath();
+        loadFallbackDeaths();
+
+        if (saveFile != null && saveFile.exists()
+                && (saveFileWatcher == null || saveFileWatcher.isShutdown())) {
+            startFileWatcher(new Parser());
+        }
     }
 }
